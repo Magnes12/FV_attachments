@@ -4,6 +4,7 @@ from openpyxl import Workbook
 
 
 PATH = "C:\\Users\\daszyma\\Desktop\\Sprzedaż\\Eksport wysyłka\\Faktury\\"
+
 files = os.listdir(PATH)
 
 wb = Workbook()
