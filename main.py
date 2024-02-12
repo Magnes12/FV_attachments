@@ -3,8 +3,14 @@ import PyPDF2
 from openpyxl import Workbook
 
 
-PATH = "C:\\Users\\daszyma\\Desktop\\Sprzedaż\\Eksport wysyłka\\Faktury"
+PATH = "C:\\Users\\daszyma\\Desktop\\Sprzedaż\\Eksport wysyłka\\Faktury\\"
 files = os.listdir(PATH)
+
+wb = Workbook()
+ws = wb.active
+
+ws.append(["FV", "Waga"])
+
 for file in files:
     if file[0] == "Z":
         pdf_dir = os.path.join(PATH, file)
@@ -14,11 +20,17 @@ for file in files:
             page = read_pdf.pages[0]
             page_content = page.extract_text()
             if "VAT nr:" in page_content:
-                start = page_content.find("VAT nr:") + len("VAT nr:")
-                end = start + 9
+                start = page_content.find("VAT nr:") + len("VAT nr:") + 1
+                end = start + 8
                 fv = page_content[start:end]
             if "Waga Netto" in page_content:
                 start = page_content.find("Waga Netto") + len("Waga Netto") + 6
                 end = start + 5
                 weight = page_content[start:end]
-                print(f'{fv} {weight}')
+
+                ws.append([f"00{fv}", weight])
+
+file_name = "fv_waga.xlsx"
+
+wb.save(file_name)
+os.system(file_name)
