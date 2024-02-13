@@ -1,11 +1,8 @@
 import os
-import PyPDF2
-import time
+from pypdf import PdfReader
 from openpyxl import Workbook
 
-
-PATH = "C:\\Users\\daszyma\\Desktop\\Sprzedaż\\Eksport wysyłka\\Faktury\\"
-
+PATH = os.path.dirname(os.path.abspath(__file__))
 files = os.listdir(PATH)
 
 wb = Workbook()
@@ -13,39 +10,49 @@ ws = wb.active
 
 ws.append(["FV", "Waga", "Paczka"])
 
+data_fv = []
+data_weight = []
+data_pack = []
 for file in files:
     if file[0] == "Z":
         pdf_dir = os.path.join(PATH, file)
         with open(pdf_dir, 'rb') as pdf_file:
-            read_pdf = PyPDF2.PdfReader(pdf_file)
-            number_of_pages = len(read_pdf.pages)
-            page = read_pdf.pages[0]
-            page_content = page.extract_text()
-            if "VAT nr:" in page_content:
-                start = page_content.find("VAT nr:") + len("VAT nr:") + 1
-                end = start + 8
-                fv = page_content[start:end]
-            if "Waga Netto" in page_content:
-                start = page_content.find("Waga Netto") + len("Waga Netto") + 1
-                end = start + 11
-                weight = page_content[start:end]
-                print(weight)
-            time.sleep(0.1)
-            ws.append([f"00{fv}", weight, ""])
+            read_pdf = PdfReader(pdf_file)
+            vat_number = None
+            weight = None
+            for page in read_pdf.pages:
+                text = page.extract_text()
+                if "VAT nr:" in text:
+                    start = text.find("VAT nr:") + len("VAT nr:") + 1
+                    end = start + 8
+                    vat_number = text[start:end]
+
+                    data_fv.append(vat_number)
+
+                if "Waga Netto" in text:
+                    start = text.find("Waga Netto") + len("Waga Netto") + 4
+                    end = start + 7
+                    weight = text[start:end]
+
+                    data_weight.append(weight)
 
     elif file[0] == "9":
         pdf_dir = os.path.join(PATH, file)
         with open(pdf_dir, 'rb') as pdf_file:
-            read_pdf = PyPDF2.PdfReader(pdf_file)
-            number_of_pages = len(read_pdf.pages)
-            page = read_pdf.pages[0]
-            page_content = page.extract_text()
-            if "Paczka:" in page_content:
-                start = page_content.find("Paczka:") + len("Paczka:") + 11
-                end = start + 6
-                paczka = page_content[start:end]
-            time.sleep(0.1)
-            ws.append(["", "", paczka])
+            read_pdf = PdfReader(pdf_file)
+            vat_number = None
+            paczka = None
+            for page in read_pdf.pages:
+                text = page.extract_text()
+                if "Paczka:" in text:
+                    start = text.find("Paczka:") + len("Paczka:") + 11
+                    end = start + 6
+                    paczka = text[start:end]
+
+                    data_pack.append(paczka)
+
+for fv, weight, pack in zip(data_fv, data_weight, data_pack):
+    ws.append([fv, weight, pack])``
 
 
 file_name = "fv_waga.xlsx"
