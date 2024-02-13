@@ -2,7 +2,9 @@ import os
 from pypdf import PdfReader
 from openpyxl import Workbook
 
-PATH = os.path.dirname(os.path.abspath(__file__))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+PATH = os.path.dirname(current_dir)
+
 files = os.listdir(PATH)
 
 wb = Workbook()
@@ -13,6 +15,7 @@ ws.append(["FV", "Waga", "Paczka"])
 data_fv = []
 data_weight = []
 data_pack = []
+
 for file in files:
     if file[0] == "Z":
         pdf_dir = os.path.join(PATH, file)
