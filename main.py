@@ -18,8 +18,6 @@ for file in files:
         pdf_dir = os.path.join(PATH, file)
         with open(pdf_dir, 'rb') as pdf_file:
             read_pdf = PdfReader(pdf_file)
-            vat_number = None
-            weight = None
             for page in read_pdf.pages:
                 text = page.extract_text()
                 if "VAT nr:" in text:
@@ -40,19 +38,17 @@ for file in files:
         pdf_dir = os.path.join(PATH, file)
         with open(pdf_dir, 'rb') as pdf_file:
             read_pdf = PdfReader(pdf_file)
-            vat_number = None
-            paczka = None
             for page in read_pdf.pages:
                 text = page.extract_text()
                 if "Paczka:" in text:
                     start = text.find("Paczka:") + len("Paczka:") + 11
                     end = start + 6
-                    paczka = text[start:end]
+                    package = text[start:end]
 
-                    data_pack.append(paczka)
+                    data_pack.append(package)
 
 for fv, weight, pack in zip(data_fv, data_weight, data_pack):
-    ws.append([fv, weight, pack])``
+    ws.append([fv, weight, pack])
 
 
 file_name = "fv_waga.xlsx"
