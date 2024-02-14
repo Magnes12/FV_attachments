@@ -51,7 +51,7 @@ for file in files:
                     data_pack.append(package)
 
 for fv, weight, pack in zip(data_fv, data_weight, data_pack):
-    ws.append([fv, weight, pack])
+    ws.append([f"00{fv}", weight, pack])
 
 
 file_name = "fv_waga.xlsx"
