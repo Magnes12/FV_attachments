@@ -1,1 +1,1 @@
-BOT do faktur
+Skrypt do faktur
