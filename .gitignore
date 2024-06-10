@@ -1,6 +1,9 @@
 test.py
 Faktury
 *.xlsx
+*.PDF
+*.zip
+*.vbs
 
 
 # Byte-compiled / optimized / DLL files
