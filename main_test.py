@@ -1,12 +1,11 @@
 import os
-import sys
 from pypdf import PdfReader
 from openpyxl import Workbook
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+PATH = os.path.dirname(current_dir)
 
-dir = os.getcwd()
-
-files = os.listdir(dir)
+files = os.listdir(PATH)
 
 wb = Workbook()
 ws = wb.active
@@ -17,12 +16,10 @@ data_fv = []
 data_weight = []
 data_pack = []
 
-print("Znalezione pliki PDF")
-
 for file in files:
+    print(file)
     if file[0] == "Z":
-        print(file)
-        pdf_dir = os.path.join(dir, file)
+        pdf_dir = os.path.join(PATH, file)
         with open(pdf_dir, 'rb') as pdf_file:
             read_pdf = PdfReader(pdf_file)
             for page in read_pdf.pages:
@@ -35,18 +32,14 @@ for file in files:
                     data_fv.append(vat_number)
 
                 if "Waga Netto" in text:
-                    start = text.find("Waga Netto") + len("Waga Netto") + 2
-                    end = start + 9
+                    start = text.find("Waga Netto") + len("Waga Netto") + 4
+                    end = start + 7
                     weight = text[start:end]
-                    if "." in weight:
-                        weight_clean = weight.replace(".", "")
-                        data_weight.append(weight_clean)
-                    else:
-                        data_weight.append(weight)
+
+                    data_weight.append(weight)
 
     elif file[0] == "9":
-        print(file)
-        pdf_dir = os.path.join(dir, file)
+        pdf_dir = os.path.join(PATH, file)
         with open(pdf_dir, 'rb') as pdf_file:
             read_pdf = PdfReader(pdf_file)
             for page in read_pdf.pages:
@@ -64,12 +57,6 @@ for fv, weight, pack in zip(data_fv, data_weight, data_pack):
 
 file_name = "fv_waga.xlsx"
 
-
-print("Excel zapisany")
 wb.save(file_name)
 
-print("Otwieram plik excel")
-os.startfile(file_name)
-
-print("Zamykam program")
-sys.exit()
+os.system(file_name)
