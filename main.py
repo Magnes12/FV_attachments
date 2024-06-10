@@ -40,9 +40,9 @@ for file in files:
                     weight = text[start:end]
                     if "." in weight:
                         weight_clean = weight.replace(".", "")
-                        data_weight.append(weight_clean)
+                        data_weight.append(weight_clean.strip())
                     else:
-                        data_weight.append(weight)
+                        data_weight.append(weight.strip())
 
     elif file[0] == "9":
         print(file)
@@ -56,7 +56,7 @@ for file in files:
                     end = start + 6
                     package = text[start:end]
 
-                    data_pack.append(package)
+                    data_pack.append(package.strip())
 
 for fv, weight, pack in zip(data_fv, data_weight, data_pack):
     ws.append([f"00{fv}", weight, pack])
