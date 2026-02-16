@@ -1,12 +1,31 @@
 import re
 import os
 import sys
+import time
 import ctypes
+import subprocess
 import pdfplumber
 import pygetwindow as gw
-import time
-import itertools
 from openpyxl import Workbook
+
+
+def get_sumatra_path():
+    """Get path to SumatraPDF.exe (works in .exe and dev)"""
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+
+    sumatra_path = os.path.join(base_path, 'SumatraPDF-3.5.2-64.exe')
+
+    if not os.path.exists(sumatra_path):
+        raise FileNotFoundError(
+            f"SumatraPDF.exe nie znaleziony!\n"
+            f"Oczekiwana lokalizacja: {sumatra_path}\n"
+            f"Pobierz z: https://www.sumatrapdfreader.org/download-free-pdf-viewer"
+        )
+
+    return sumatra_path
 
 
 def force_window_height():
@@ -25,37 +44,50 @@ def print_header():
     """Print application header."""
     header = """
 ╔══════════════════════════════════════════════════════════════╗
-║          PDF Parser - Ekstraktor Danych z Faktur             ║
+║          PDF Parser - Ekstraktor Danych z Załączników        ║
 ╚══════════════════════════════════════════════════════════════╝
 """
     print(header)
 
 
 def print_separator(char="─", length=62):
-    """Print a separator line."""
     print(char * length)
 
 
-def extract_package(pdf_path):
-    """Extract package number from any PDF (primary: 9*, fallback: Z*)."""
-    package = None
-    try:
-        with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                pattern = r'P\s*aczka:\s*(\d+)'
-                match = re.search(pattern, text)
-                if match:
-                    package = match.group(1).strip()[-6:]
-                    break
-    except Exception as e:
-        print(f"  ✗ Błąd w pliku {os.path.basename(pdf_path)}: {e}")
-    return package
+def get_files_paths(current_dir):
+    """Get Z* (attachments) and 9* (invoices) PDF files"""
+    files = os.listdir(current_dir)
+    z_files = sorted([f for f in files if f.startswith("Z") and f.lower().endswith(".pdf")])
+    nine_files = sorted([f for f in files if f.startswith("009") and f.lower().endswith(".pdf")])
+    return z_files, nine_files
 
 
-def extract_vat_and_weight(pdf_path):
-    """Extract VAT number and weight from Z-prefixed PDFs."""
+def print_founded_files(z_files, nine_files, col_width=30):
+    """Print found PDF files"""
+    print("\n📄 ZNALEZIONE PLIKI PDF")
+    print_separator()
+    print(f"\n  {'Załączniki (Z*)':<{col_width}}")
+    for f in z_files:
+        display = f"• {f}" if f else ""
+        print(f"  {display:<{col_width}}")
+
+    if nine_files:
+        print(f"\n  {'Faktury (9*) - do wydruku':<{col_width}}")
+        for f in nine_files:
+            print(f"  • {f}")
+
+    # ─── Warnings ───────────────────────────────────────────────────
+    if not z_files:
+        print("\n⚠ UWAGA: Nie znaleziono żadnych plików Z*!")
+        print("\nNaciśnij ENTER aby zakończyć...")
+        input()
+        sys.exit(1)
+
+
+def extract_vat_package_weight(pdf_path):
+    """Extract VAT, package number, and weight from Z* PDFs"""
     vat_number = None
+    package = None
     weight = None
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -65,7 +97,13 @@ def extract_vat_and_weight(pdf_path):
                 # Extract VAT number
                 if "VAT nr:" in text and vat_number is None:
                     start = text.find("VAT nr:") + len("VAT nr:") + 1
-                    vat_number = text[start:start + 8].strip()
+                    vat_number = text[start:start + 10].strip()
+
+                # Extract package number
+                pattern = r'P\s*aczka:\s*(\d+)'
+                match = re.search(pattern, text)
+                if match:
+                    package = match.group(1).strip()[-6:]
 
                 # Extract weight
                 if "Waga Netto" in text and weight is None:
@@ -77,149 +115,159 @@ def extract_vat_and_weight(pdf_path):
                     except ValueError:
                         weight = clean_str
 
-                if vat_number and weight:
+                if vat_number and package and weight:
                     break
     except Exception as e:
         print(f"  ✗ Błąd w pliku {os.path.basename(pdf_path)}: {e}")
-    return vat_number, weight
+    return vat_number, package, weight
+
+
+def processing_founded_files(files, current_dir, col_width=30):
+    """Process Z* files and extract data"""
+    print("\n\n🔍 PRZETWARZANIE PLIKÓW")
+    print_separator()
+
+    rows = []
+    print(f"\n  {'Załączniki (Z*)':<{col_width}}")
+
+    for file in files:
+        pdf_path = os.path.join(current_dir, file)
+        vat, package, weight = extract_vat_package_weight(pdf_path)
+
+        missing = []
+        if not vat: missing.append("VAT")
+        if not package: missing.append("paczka")
+        if not weight: missing.append("waga")
+
+        if not missing:
+            status = f"✓ {file}"
+        else:
+            missing_str = ", ".join(missing)
+            status = f"✗ {file} (brak: {missing_str})"
+
+        print(f"  {status}")
+        rows.append((vat, weight, package))
+
+    return rows
+
+
+def summary(rows):
+    """Print data summary"""
+    print("\n\n📊 PODSUMOWANIE DANYCH")
+    print_separator()
+
+    count_vat = sum(1 for r in rows if r[0] is not None)
+    count_weight = sum(1 for r in rows if r[1] is not None)
+    count_package = sum(1 for r in rows if r[2] is not None)
+    total = len(rows)
+
+    print(f"  Wiersze razem  : {total}")
+    print(f"  Numery VAT     : {count_vat}/{total}")
+    print(f"  Wagi           : {count_weight}/{total}")
+    print(f"  Numery paczek  : {count_package}/{total}")
+
+    missing = total - min(count_vat, count_weight, count_package)
+    if missing:
+        print(f"\n  ⚠ {missing} wiersze mają braki — komórki zostawione puste")
+    else:
+        print("  ✓ Wszystkie dane kompletne")
+
+    print_separator()
+
+
+def excel_create(rows):
+    """Create Excel file with extracted data"""
+    print("\n💾 TWORZENIE PLIKU EXCEL")
+    print_separator()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Dane Faktur"
+
+    ws.append(["FV", "Waga", "Paczka"])
+
+    row_count = 0
+    for vat, weight, package in rows:
+        fv_cell = f"{vat}" if vat else None
+        ws.append([fv_cell, weight, package])
+        row_count += 1
+
+    file_name = "fv_waga.xlsx"
+    wb.save(file_name)
+
+    print(f"  ✓ Plik zapisany : {file_name}")
+    print(f"  ✓ Dodano wierszy: {row_count}")
+    print_separator()
+
+    return file_name
+
+
+def print_invoices_sequential(invoice_files, current_dir):
+    print("\n\n🖨️  DRUKOWANIE FAKTUR")
+    print_separator()
+
+    try:
+        sumatra_exe = get_sumatra_path()
+    except Exception as e:
+        print(f"  ❌ {e}")
+        return
+
+    for idx, filename in enumerate(invoice_files, 1):
+        pdf_path = os.path.join(current_dir, filename)
+        print(f"  [{idx}/{len(invoice_files)}] Drukuję: {filename}...", end=" ", flush=True)
+
+        try:
+            result = subprocess.run(
+                [sumatra_exe,
+                 "-print-to-default",
+                 "-print-settings", "fit",
+                 "-exit-when-done",
+                 "-reuse-instance",
+                 pdf_path
+                 ],
+                capture_output=True,
+                timeout=60
+            )
+
+            if result.returncode == 0:
+                print("✓")
+            else:
+                print(f"✗ (Kod: {result.returncode})")
+
+            time.sleep(8)
+
+        except Exception as e:
+            print(f"✗ Błąd: {e}")
+
+    print_separator()
+    print("  ✅ Wydruk zakończony")
 
 
 def main():
     try:
         force_window_height()
-
+        current_dir = os.getcwd()
         time.sleep(1)
+
         print_header()
 
-        current_dir = os.getcwd()
-        files = os.listdir(current_dir)
+        # Get both Z* and 9* files
+        z_files, nine_files = get_files_paths(current_dir)
 
-        # Separate files by type
-        nine_files = sorted([f for f in files if f.startswith("9") and f.lower().endswith(".pdf")])
-        z_files    = sorted([f for f in files if f.startswith("Z") and f.lower().endswith(".pdf")])
+        print_founded_files(z_files, nine_files)
 
-        # ─── Display found files ────────────────────────────────────────
-        print("\n📄 ZNALEZIONE PLIKI PDF")
-        print_separator()
+        # Process Z* files for data extraction
+        rows = processing_founded_files(z_files, current_dir)
 
-        col_width = 30
-        print(f"\n  {'Faktury (9*)':<{col_width}} {'Załączniki (Z*)':<{col_width}}")
+        summary(rows)
 
-        for f, z in itertools.zip_longest(nine_files, z_files, fillvalue=""):
-            f_display = f"• {f}" if f else ""
-            z_display = f"• {z}" if z else ""
-            print(f"  {f_display:<{col_width}} {z_display}")
+        file_name = excel_create(rows)
 
-        # ─── Warnings ───────────────────────────────────────────────────
-        if not nine_files and not z_files:
-            print("\n⚠ UWAGA: Nie znaleziono żadnych plików PDF!")
-            print("\nNaciśnij ENTER aby zakończyć...")
-            input()
-            sys.exit(1)
-
-        if not nine_files:
-            print("\n⚠ UWAGA: Brak faktur (9*) — dane będą wyciągane tylko z załączników.")
-        if not z_files:
-            print("\n⚠ UWAGA: Brak załączników (Z*) — numery paczek będą szukane tylko w fakturach.")
-
-        # ─── Processing ─────────────────────────────────────────────────
-        print("\n\n🔍 PRZETWARZANIE PLIKÓW")
-        print_separator()
-
-        # Each row = one paired entry. Structure: (vat, weight, package)
-        # Any of these can be None — that becomes an empty cell in Excel.
-        rows = []
-
-        print(f"\n  {'Faktury (9*)':<{col_width}} {'Załączniki (Z*)':<{col_width}}")
-
-        for f_file, z_file in itertools.zip_longest(nine_files, z_files, fillvalue=None):
-            f_status = ""
-            z_status = ""
-
-            vat = None
-            weight = None
-            package = None
-
-            # ── 1. Process Invoice (9*) ─── extract package number ──────
-            if f_file:
-                pdf_path = os.path.join(current_dir, f_file)
-                package = extract_package(pdf_path)
-                f_status = f"✓ {f_file}" if package else f"✗ {f_file} (brak nr paczki)"
-
-            # ── 2. Process Attachment (Z*) ─── extract VAT + weight ─────
-            if z_file:
-                pdf_path = os.path.join(current_dir, z_file)
-                vat, weight = extract_vat_and_weight(pdf_path)
-                z_status = f"✓ {z_file}" if (vat and weight) else f"✗ {z_file} (brak danych)"
-
-            # ── 3. Fallback: no package from 9*? try Z* ─────────────────
-            if package is None and z_file:
-                pdf_path = os.path.join(current_dir, z_file)
-                package = extract_package(pdf_path)
-                if package:
-                    # Update statuses to reflect the fallback
-                    f_status = f"✗ {f_file} (brak nr)" if f_file else ""
-                    z_status += " [paczka: fallback]"
-
-            # ── 4. Print both statuses side by side ──────────────────────
-            print(f"  {f_status:<{col_width}} {z_status}")
-
-            # ── 5. Always append the row — None values → empty cells ─────
-            rows.append((vat, weight, package))
-
-        # ─── Summary ────────────────────────────────────────────────────
-        print("\n\n📊 PODSUMOWANIE DANYCH")
-        print_separator()
-
-        count_vat = sum(1 for r in rows if r[0] is not None)
-        count_weight = sum(1 for r in rows if r[1] is not None)
-        count_package = sum(1 for r in rows if r[2] is not None)
-        total = len(rows)
-
-        print(f"  Wiersze razem  : {total}")
-        print(f"  Numery VAT     : {count_vat}/{total}")
-        print(f"  Wagi           : {count_weight}/{total}")
-        print(f"  Numery paczek  : {count_package}/{total}")
-
-        missing = total - min(count_vat, count_weight, count_package)
-        if missing:
-            print(f"\n  ⚠ {missing} wiersze mają braki — komórki zostawione puste")
-        else:
-            print("  ✓ Wszystkie dane kompletne")
-
-        print_separator()
-
-        # ─── Create Excel ───────────────────────────────────────────────
-        print("\n💾 TWORZENIE PLIKU EXCEL")
-        print_separator()
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Dane Faktur"
-
-        # Header
-        ws.append(["FV", "Waga", "Paczka"])
-
-        # Data — None stays as None → openpyxl writes empty cell
-        row_count = 0
-        for vat, weight, package in rows:
-            fv_cell = f"00{vat}" if vat else None
-            ws.append([fv_cell, weight, package])
-            row_count += 1
-
-        file_name = "fv_waga.xlsx"
-        wb.save(file_name)
-
-        print(f"  ✓ Plik zapisany : {file_name}")
-        print(f"  ✓ Dodano wierszy: {row_count}")
-        print_separator()
-
-        # ─── Done ───────────────────────────────────────────────────────
         print("\n✅ ZAKOŃCZONO POMYŚLNIE")
         print(f"\n  📁 Plik wynikowy: {file_name}")
         print_separator()
 
-        print("\n\nNaciśnij ENTER aby zakończyć i otworzyć plik...")
+        print("\n\nNaciśnij ENTER aby otworzyć plik Excel...")
         input()
 
         print("📂 Otwieram plik Excel...")
@@ -227,6 +275,27 @@ def main():
             os.startfile(file_name)
         except Exception as e:
             print(f"❌ Błąd podczas otwierania pliku: {e}")
+
+        # ═══════════════════════════════════════════════════════════════
+        # PRINT INVOICES (9*) - Optional step
+        # ═══════════════════════════════════════════════════════════════
+
+        if nine_files:
+            print("\n" + "═" * 62)
+            print(f"\n📋 Znaleziono {len(nine_files)} faktur (9*)")
+
+            response = input("\nCzy wydrukować faktury? [T/N]: ").strip().upper()
+
+            if response in ('T', 'TAK', 'Y', 'YES'):
+                print_invoices_sequential(nine_files, current_dir)
+            else:
+                print("\n  ⏭️  Pominięto drukowanie")
+                print_separator()
+        else:
+            print("\n  ℹ️  Brak faktur (9*) do wydruku")
+
+        print("\n\nNaciśnij ENTER aby zakończyć...")
+        input()
 
     except Exception as e:
         print(f"\n❌ BŁĄD KRYTYCZNY: {e}")
