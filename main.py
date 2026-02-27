@@ -67,13 +67,13 @@ def print_separator(char="─", length=62):
 
 def get_files_paths(current_dir):
     """
-    Get Z* (attachments) and 009* (invoices) PDF files
+    Get Z* (attachments) and 9* (invoices) PDF files
 
     :param current_dir: Current working directory
     """
     files = os.listdir(current_dir)
     z_files = sorted([f for f in files if f.startswith("Z") and f.lower().endswith(".pdf")])
-    nine_files = sorted([f for f in files if f.startswith("009") and f.lower().endswith(".pdf")])
+    nine_files = sorted([f for f in files if f.startswith(("9", "009")) and f.lower().endswith(".pdf")])
     return z_files, nine_files
 
 
@@ -82,7 +82,7 @@ def print_founded_files(z_files, nine_files, col_width=30):
     Print found PDF files
 
     :param z_files: PDF files starting with 'Z'
-    :param nine_files: PDF files starting with '009'
+    :param nine_files: PDF files starting with '9'
     :param col_width: Columne width
     """
 
@@ -316,12 +316,12 @@ def main():
             print(f"❌ Błąd podczas otwierania pliku: {e}")
 
         # ═══════════════════════════════════════════════════════════════
-        # PRINT INVOICES (009*) - Optional step
+        # PRINT INVOICES (9*) - Optional step
         # ═══════════════════════════════════════════════════════════════
 
         if nine_files:
             print("\n" + "═" * 62)
-            print(f"\n📋 Znaleziono {len(nine_files)} faktur (009*)")
+            print(f"\n📋 Znaleziono {len(nine_files)} faktur (9*)")
 
             response = input("\nCzy wydrukować faktury? [T/N]: ").strip().upper()
 
@@ -331,7 +331,7 @@ def main():
                 print("\n  ⏭️  Pominięto drukowanie")
                 print_separator()
         else:
-            print("\n  ℹ️  Brak faktur (009*) do wydruku")
+            print("\n  ℹ️  Brak faktur (9*) do wydruku")
 
         print("\n\nNaciśnij ENTER aby zakończyć...")
         input()
